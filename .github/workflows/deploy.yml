@@ -8,8 +8,7 @@ on:
 # Устанавливаем Node 24 для всех шагов по умолчанию
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true
-
+  
 jobs:
   deploy:
     runs-on: ubuntu-latest
