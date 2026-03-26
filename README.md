@@ -40,26 +40,28 @@
 ```bash
 git clone https://github.com/maxfil777/daily-insight-bot.git
 cd morning-digest-bot
+```
 
----
-2. Настройка окружения
+### 12. Настройка окружения
 Создайте виртуальное окружение и установите зависимости:
 
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
 
----
-3. Конфигурация (.env)
+### 13. Конфигурация (.env)
 
 Создайте файл .env в корне проекта и заполните его своими данными (пример):
 
+```bash
 BOT_TOKEN=123456789:ABCDEF...
 WEATHER_KEY=your_api_key
 MY_ID=12345678
-CITY=Krasnodar
+CITY=Moscow
 NOTIFY_TIME=08:30
-
+```
 ---
 📋 Команды бота
 
@@ -76,7 +78,7 @@ NOTIFY_TIME=08:30
 1. Создайте файл сервиса: sudo nano /etc/systemd/system/weather_bot.service
 2. Скопируйте конфигурацию:
 
-
+```bash
 [Unit]
 Description=Telegram Morning Bot
 After=network.target
@@ -90,12 +92,14 @@ EnvironmentFile=/home/debian/weather_bot/.env
 
 [Install]
 WantedBy=multi-user.target
-
+```
 3. Запустите сервис:
 
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable weather_bot
 sudo systemctl start weather_bot
+```
 
 🔄 Автоматический деплой (CI/CD)
 
