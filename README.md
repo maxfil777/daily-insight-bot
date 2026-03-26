@@ -80,7 +80,7 @@ NOTIFY_TIME=08:30
 
 1. Создайте файл сервиса: 
 ```bash
-sudo nano /etc/systemd/system/weather_bot.service**
+sudo nano /etc/systemd/system/weather_bot.service
 ```
 2. Скопируйте конфигурацию:
 
