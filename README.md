@@ -42,7 +42,7 @@ git clone https://github.com/maxfil777/daily-insight-bot.git
 cd morning-digest-bot
 ```
 
-### 12. Настройка окружения
+### 2. Настройка окружения
 Создайте виртуальное окружение и установите зависимости:
 
 ```bash
@@ -51,7 +51,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 13. Конфигурация (.env)
+### 3. Конфигурация (.env)
 
 Создайте файл .env в корне проекта и заполните его своими данными (пример):
 
