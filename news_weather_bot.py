@@ -133,12 +133,30 @@ def get_main_kb():
 
 # --- ОБРАБОТЧИКИ ---
 @dp.message(Command("start"))
+@dp.message(F.text == "👋 Начать!") # Обработка кнопки
 async def cmd_start(message: types.Message):
     add_user(message.from_user.id)
+    # Получаем город пользователя (по умолчанию или установленный)
     city = get_user_city(message.from_user.id)
+    
+    welcome_text = (
+        f"👋 <b>Добро пожаловать, {message.from_user.first_name}!</b>\n\n"
+        f"Morning Digest Bot — твой личный ассистент для идеального старта дня. "
+        f"Я буду присылать тебе свежую сводку каждое утро.\n\n"
+        f"⚙️ **Твои текущие настройки:**\n"
+        f"📍 Город: <code>{city}</code>\n"
+        f"⏰ Время рассылки: <code>{MORNING_TIME}</code>\n\n"
+        f"**Что я умею:**\n"
+        f"🌡 Погода с «ощущением как».\n"
+        f"💵 Курсы USD/EUR от ЦБ РФ.\n"
+        f"📰 Главные заголовки из РБК и Habr.\n\n"
+        f"Нажми кнопку ниже, чтобы получить сводку прямо сейчас, или настрой свой город!"
+    )
+    
     await message.answer(
-        f"👋 <b>Бот запущен!</b>\nГород: {city}. Время: {MORNING_TIME}",
-        parse_mode=ParseMode.HTML, reply_markup=get_main_kb()
+        welcome_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_main_kb() # Твоя клавиатура с кнопками
     )
 
 # FSM: Начало смены города
