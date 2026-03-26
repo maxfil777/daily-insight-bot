@@ -9,14 +9,13 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # --- НАСТРОЙКА ЛОГИРОВАНИЯ ---
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 load_dotenv()
@@ -24,7 +23,7 @@ load_dotenv()
 # Конфигурация
 API_TOKEN = os.getenv('BOT_TOKEN')
 WEATHER_API_KEY = os.getenv('WEATHER_KEY')
-CITY = os.getenv('CITY', 'Moscow')
+DEFAULT_CITY = os.getenv('CITY', 'Krasnodar')
 MORNING_TIME = os.getenv('NOTIFY_TIME', '08:30')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'bot_users.db')
 
@@ -33,52 +32,70 @@ RSS_URLS = [
     'https://habr.com/ru/rss/best/daily/'
 ]
 
+# --- СОСТОЯНИЯ (FSM) ---
+class UserSettings(StatesGroup):
+    waiting_for_city = State()
+
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 scheduler = AsyncIOScheduler()
 
-# --- БАЗА ДАННЫХ (Только ID) ---
+# --- БАЗА ДАННЫХ С МИГРАЦИЕЙ ---
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY)')
+        # Создаем таблицу, если её нет (с колонкой city)
+        conn.execute('''CREATE TABLE IF NOT EXISTS users 
+                        (user_id INTEGER PRIMARY KEY, city TEXT DEFAULT ?)''', (DEFAULT_CITY,))
+        
+        # Миграция: Проверяем, есть ли колонка city (для старых баз)
+        try:
+            conn.execute(f'ALTER TABLE users ADD COLUMN city TEXT DEFAULT "{DEFAULT_CITY}"')
+            logger.info("Миграция: колонка city добавлена.")
+        except sqlite3.OperationalError:
+            pass # Колонка уже существует
         conn.commit()
 
 def add_user(user_id):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
 
+def update_user_city(user_id, city):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('UPDATE users SET city = ? WHERE user_id = ?', (city, user_id))
+
+def get_user_city(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        res = conn.execute('SELECT city FROM users WHERE user_id = ?', (user_id,)).fetchone()
+        return res[0] if res else DEFAULT_CITY
+
+def get_all_users_data():
+    with sqlite3.connect(DB_PATH) as conn:
+        return conn.execute('SELECT user_id, city FROM users').fetchall()
+
 def remove_user(user_id):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
 
-def get_all_users():
-    with sqlite3.connect(DB_PATH) as conn:
-        return [row[0] for row in conn.execute('SELECT user_id FROM users').fetchall()]
-
 # --- СБОР ДАННЫХ ---
-def get_weather():
-    url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={CITY}&lang=ru"
+def get_weather(city):
+    url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={city}&lang=ru"
     try:
         r = requests.get(url, timeout=10)
         if r.status_code == 200:
             d = r.json()
             temp = round(d["current"]["temp_c"])
             cond = d["current"]["condition"]["text"]
-            feels = round(d["current"]["feelslike_c"])
-            return f"🌡 <b>Погода в {CITY}:</b> {temp}°C, {cond}\n<i>Ощущается как: {feels}°C</i>\n"
-    except: pass
-    return "⚠️ Погода временно недоступна.\n"
+            return f"🌡 <b>Погода в {city}:</b> {temp}°C, {cond}\n"
+        return None
+    except: return None
 
 def get_rates():
     try:
         r = requests.get("https://www.cbr-xml-daily.ru/daily_json.js", timeout=10)
         d = r.json()
-        usd = d['Valute']['USD']['Value']
-        eur = d['Valute']['EUR']['Value']
-        # Отступ \n сверху для разделения блоков
+        usd, eur = d['Valute']['USD']['Value'], d['Valute']['EUR']['Value']
         return f"\n💵 <b>Курс ЦБ:</b>\nUSD {usd:.2f} ₽ | EUR {eur:.2f} ₽\n"
-    except:
-        return "\n⚠️ Курсы валют недоступны.\n"
+    except: return "\n⚠️ Курсы временно недоступны.\n"
 
 def get_news():
     text = "\n📰 <b>Главное за утро:</b>\n"
@@ -86,70 +103,86 @@ def get_news():
     for url in RSS_URLS:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:3]:
+            for entry in feed.entries[:2]:
                 count += 1
                 text += f"{count}. <a href='{entry.link}'>{entry.title}</a>\n"
         except: continue
     return text if count > 0 else "\nНовости не найдены."
 
-async def build_digest():
-    return f"☀️ <b>Утренний дайджест</b>\n\n{get_weather()}{get_rates()}{get_news()}"
+async def build_digest(city):
+    weather = get_weather(city) or "⚠️ Ошибка загрузки погоды.\n"
+    return f"☀️ <b>Утренний дайджест</b>\n\n{weather}{get_rates()}{get_news()}"
 
 # --- КЛАВИАТУРА ---
 def get_main_kb():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📰 Получить сводку сейчас")],
-            [KeyboardButton(text="❌ Отписаться от рассылки")]
-        ], 
-        resize_keyboard=True
-    )
+    return ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="📰 Сводка сейчас"), KeyboardButton(text="📍 Сменить город")],
+        [KeyboardButton(text="❌ Отписаться")]
+    ], resize_keyboard=True)
 
 # --- ОБРАБОТЧИКИ ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     add_user(message.from_user.id)
+    city = get_user_city(message.from_user.id)
     await message.answer(
-        f"👋 <b>Бот запущен!</b>\nРассылка в {MORNING_TIME}.",
+        f"👋 <b>Бот запущен!</b>\nГород: {city}. Время: {MORNING_TIME}",
         parse_mode=ParseMode.HTML, reply_markup=get_main_kb()
     )
 
+# FSM: Начало смены города
+@dp.message(F.text == "📍 Сменить город")
+@dp.message(Command("setcity"))
+async def set_city_start(message: types.Message, state: FSMContext):
+    await state.set_state(UserSettings.waiting_for_city)
+    await message.answer("Напишите название города (например, <i>Sochi</i> или <i>Москва</i>):", 
+                         parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+
+# FSM: Обработка ввода города
+@dp.message(UserSettings.waiting_for_city)
+async def set_city_process(message: types.Message, state: FSMContext):
+    city_name = message.text.strip()
+    # Проверка города через API
+    if get_weather(city_name):
+        update_user_city(message.from_user.id, city_name)
+        await state.clear()
+        await message.answer(f"✅ Город установлен: <b>{city_name}</b>", 
+                             parse_mode=ParseMode.HTML, reply_markup=get_main_kb())
+    else:
+        await message.answer("❌ Не удалось найти такой город. Попробуйте еще раз или напишите другой.")
+
+@dp.message(F.text == "📰 Сводка сейчас")
+@dp.message(Command("now"))
+async def cmd_now(message: types.Message):
+    city = get_user_city(message.from_user.id)
+    digest = await build_digest(city)
+    await message.answer(digest, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
-    text = (
-        "📖 <b>Справка:</b>\n\n"
-        "/start — Подписаться\n"
-        "/now — Сводка сейчас\n"
-        "/stop — Отписаться\n\n"
-        f"Город: {CITY}\nРассылка: {MORNING_TIME}"
-    )
-    await message.answer(text, parse_mode=ParseMode.HTML)
+    city = get_user_city(message.from_user.id)
+    await message.answer(f"📖 <b>Справка</b>\nГород: {city}\nРассылка: {MORNING_TIME}\n\n/setcity — сменить локацию", parse_mode=ParseMode.HTML)
 
-@dp.message(F.text == "❌ Отписаться от рассылки")
+@dp.message(F.text == "❌ Отписаться")
 @dp.message(Command("stop"))
 async def cmd_stop(message: types.Message):
     remove_user(message.from_user.id)
     await message.answer("📴 Вы отписаны.", reply_markup=ReplyKeyboardRemove())
 
-@dp.message(F.text == "📰 Получить сводку сейчас")
-@dp.message(Command("now"))
-async def cmd_now(message: types.Message):
-    digest = await build_digest()
-    await message.answer(digest, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
-
-# Админская команда для просмотра ID
 @dp.message(Command("admin_users"))
 async def cmd_admin_users(message: types.Message):
-    if message.from_user.id == int(os.getenv('MY_ID')):
-        users = get_all_users()
-        await message.answer(f"👥 <b>Подписчиков: {len(users)}</b>\n\n" + "\n".join([f"• <code>{u}</code>" for u in users]), parse_mode=ParseMode.HTML)
+    if str(message.from_user.id) == os.getenv('MY_ID'):
+        data = get_all_users_data()
+        text = f"👥 <b>Подписчиков: {len(data)}</b>\n\n"
+        text += "\n".join([f"• <code>{u[0]}</code> ({u[1]})" for u in data])
+        await message.answer(text, parse_mode=ParseMode.HTML)
 
 # --- РАССЫЛКА ---
 async def daily_broadcast():
-    users = get_all_users()
-    digest = await build_digest()
-    for user_id in users:
+    users_data = get_all_users_data()
+    for user_id, city in users_data:
         try:
+            digest = await build_digest(city)
             await bot.send_message(user_id, digest, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
             await asyncio.sleep(0.05)
         except: pass
@@ -159,9 +192,7 @@ async def main():
     h, m = MORNING_TIME.split(":")
     scheduler.add_job(daily_broadcast, "cron", hour=int(h), minute=int(m))
     scheduler.start()
-    logger.info(f"Бот запущен. База: {DB_PATH}")
     await dp.start_polling(bot)
 
 if __name__ == '__main__':
     asyncio.run(main())
-
