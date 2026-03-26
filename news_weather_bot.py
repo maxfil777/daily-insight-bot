@@ -94,7 +94,8 @@ def get_weather(city):
             d = r.json()
             temp = round(d["current"]["temp_c"])
             cond = d["current"]["condition"]["text"]
-            return f"🌡 <b>Погода в {city}:</b> {temp}°C, {cond}\n"
+            feels = round(d["current"]["feelslike_c"]) # Добавили обратно
+            return f"🌡 <b>Погода в {city}:</b> {temp}°C, {cond}\n<i>Ощущается как: {feels}°C</i>\n"
         return None
     except: return None
 
@@ -112,7 +113,8 @@ def get_news():
     for url in RSS_URLS:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:2]:
+            # Берем по 3 новости из каждой ленты для полноты картины
+            for entry in feed.entries[:3]: 
                 count += 1
                 text += f"{count}. <a href='{entry.link}'>{entry.title}</a>\n"
         except: continue
