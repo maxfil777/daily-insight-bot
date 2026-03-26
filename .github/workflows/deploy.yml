@@ -13,8 +13,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4.1.7
+      - name: Checkout code        
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.1.0
