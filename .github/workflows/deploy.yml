@@ -1,10 +1,11 @@
 
 name: Deploy Weather Bot
 
+
 on:
   push:
-    branches:
-      - main  # Срабатывает при пуше в ветку main
+    branches: [ main ]
+  workflow_dispatch: # Позволяет запускать кнопкой из интерфейса GitHub
 
 jobs:
   deploy:
