@@ -78,7 +78,9 @@ NOTIFY_TIME=08:30
 
 Для обеспечения непрерывной работы рекомендуется использовать systemd:
 
-1. Создайте файл сервиса: **sudo nano /etc/systemd/system/weather_bot.service**
+1. Создайте файл сервиса: ```bash
+sudo nano /etc/systemd/system/weather_bot.service**
+```
 2. Скопируйте конфигурацию:
 
 ```bash
