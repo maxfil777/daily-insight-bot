@@ -1,6 +1,4 @@
-
-name: Deploy Weather Bot
-
+- name: Deploy Weather Bot
 
 on:
   push:
@@ -68,4 +66,3 @@ jobs:
             sudo systemctl restart weather_bot
             
             # Остальные параметры (sync, timeout и т.д.) можно оставить по умолчанию, если они не критичны
-            
