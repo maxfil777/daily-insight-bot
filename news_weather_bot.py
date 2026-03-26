@@ -1,3 +1,5 @@
+# версия v2.1
+
 import os
 import asyncio
 import logging
@@ -43,27 +45,31 @@ scheduler = AsyncIOScheduler()
 # --- БАЗА ДАННЫХ С МИГРАЦИЕЙ ---
 
 def init_db():
+    # Экранируем одинарные кавычки для безопасности в DEFAULT
+    safe_default_city = DEFAULT_CITY.replace("'", "''")
+    
     with sqlite3.connect(DB_PATH) as conn:
-        # В SQLite DEFAULT не поддерживает параметры (?), используем f-строку
+        # 1. Создание таблицы
         conn.execute(f'''CREATE TABLE IF NOT EXISTS users 
-                        (user_id INTEGER PRIMARY KEY, city TEXT DEFAULT '{DEFAULT_CITY}')''')
+                        (user_id INTEGER PRIMARY KEY, city TEXT DEFAULT '{safe_default_city}')''')
         
-        # Миграция: Проверяем, есть ли колонка city
+        # 2. Миграция
         try:
-            conn.execute(f"ALTER TABLE users ADD COLUMN city TEXT DEFAULT '{DEFAULT_CITY}'")
+            conn.execute(f"ALTER TABLE users ADD COLUMN city TEXT DEFAULT '{safe_default_city}'")
             logger.info("Миграция: колонка city добавлена.")
         except sqlite3.OperationalError:
-            # Если колонка уже есть, SQLite выдаст ошибку, которую мы просто игнорируем
             pass
         conn.commit()
 
 def add_user(user_id):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('INSERT OR IGNORE INTO users (user_id) VALUES (?)', (user_id,))
+        conn.commit()
 
 def update_user_city(user_id, city):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('UPDATE users SET city = ? WHERE user_id = ?', (city, user_id))
+        conn.commit() # Явный коммит для надежности
 
 def get_user_city(user_id):
     with sqlite3.connect(DB_PATH) as conn:
@@ -77,6 +83,7 @@ def get_all_users_data():
 def remove_user(user_id):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('DELETE FROM users WHERE user_id = ?', (user_id,))
+        conn.commit()
 
 # --- СБОР ДАННЫХ ---
 def get_weather(city):
