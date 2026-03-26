@@ -1,4 +1,5 @@
 ### это консольный вывод из базы
+## 
 
 import sqlite3
 import os
@@ -38,4 +39,5 @@ def check_database():
 
 if __name__ == "__main__":
     check_database()
+
 
