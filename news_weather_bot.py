@@ -23,7 +23,7 @@ load_dotenv()
 # Конфигурация
 API_TOKEN = os.getenv('BOT_TOKEN')
 WEATHER_API_KEY = os.getenv('WEATHER_KEY')
-DEFAULT_CITY = os.getenv('CITY', 'Krasnodar')
+DEFAULT_CITY = os.getenv('CITY', 'Moscow')
 MORNING_TIME = os.getenv('NOTIFY_TIME', '08:30')
 DB_PATH = os.path.join(os.path.dirname(__file__), 'bot_users.db')
 
@@ -41,18 +41,20 @@ dp = Dispatcher(storage=MemoryStorage())
 scheduler = AsyncIOScheduler()
 
 # --- БАЗА ДАННЫХ С МИГРАЦИЕЙ ---
+
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
-        # Создаем таблицу, если её нет (с колонкой city)
-        conn.execute('''CREATE TABLE IF NOT EXISTS users 
-                        (user_id INTEGER PRIMARY KEY, city TEXT DEFAULT ?)''', (DEFAULT_CITY,))
+        # В SQLite DEFAULT не поддерживает параметры (?), используем f-строку
+        conn.execute(f'''CREATE TABLE IF NOT EXISTS users 
+                        (user_id INTEGER PRIMARY KEY, city TEXT DEFAULT '{DEFAULT_CITY}')''')
         
-        # Миграция: Проверяем, есть ли колонка city (для старых баз)
+        # Миграция: Проверяем, есть ли колонка city
         try:
-            conn.execute(f'ALTER TABLE users ADD COLUMN city TEXT DEFAULT "{DEFAULT_CITY}"')
+            conn.execute(f"ALTER TABLE users ADD COLUMN city TEXT DEFAULT '{DEFAULT_CITY}'")
             logger.info("Миграция: колонка city добавлена.")
         except sqlite3.OperationalError:
-            pass # Колонка уже существует
+            # Если колонка уже есть, SQLite выдаст ошибку, которую мы просто игнорируем
+            pass
         conn.commit()
 
 def add_user(user_id):
