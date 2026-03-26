@@ -1,4 +1,4 @@
-name: Deploy Weather Bot
+name: Deploy Daily Insight Bot
 
 on:
   push:
@@ -20,9 +20,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: 22
           script: |
-            cd /home/debian/weather_bot
+            cd /home/debian/daily-insight-bot
             git pull origin main
             ./venv/bin/pip install -r requirements.txt
             sudo systemctl restart weather_bot
-
-##
